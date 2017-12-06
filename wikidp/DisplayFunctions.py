@@ -1,5 +1,18 @@
+#!/usr/bin/python
+# coding=UTF-8
+#
+# WikiDP Wikidata Portal
+# Copyright (C) 2017
+# All rights reserved.
+#
+# This code is distributed under the terms of the GNU General Public
+# License, Version 3. See the text file "COPYING" for further details
+# about the terms of this license.
+#
+""" Functions for handling the display of items."""
 from collections import OrderedDict
 import json
+import logging
 import pickle
 import urllib.request
 import datetime
@@ -25,8 +38,8 @@ def search_result_list(string):
             opt = qid_to_basic_details(opt)
             output.append(opt)
         # skip those that wdi can not process
-        except Exception as e:
-            print (e)
+        except Exception as _e:
+            logging.exception("Issue retrieving result using wikidataintegrator.")
     return output
 
 def item_detail_parse(qid):
@@ -34,8 +47,8 @@ def item_detail_parse(qid):
     and returns a new dictionary of previewing information and a dictionary of property counts"""
     try:
         item = wdi_core.WDItemEngine(wd_item_id=qid)
-    except:
-        print("Error reading: ", qid)
+    except Exception as _e:
+        logging.exception("Error reading: %s", qid)
         return None
     load_caches()
     global QID_CACHE
@@ -48,12 +61,14 @@ def item_detail_parse(qid):
     count_dict = {}
     try:
         output_dict['aliases'] = [x['value'] for x in item['aliases'][LANG]]
-    except:
-        pass
+    except Exception as _e:
+        logging.exception("Exception updating output_dict[aliases]")
+
     try:
         output_dict['description'] = item['descriptions'][LANG]['value']
-    except:
-        pass
+    except Exception as _e:
+        logging.exception("Exception updating output_dict[description]")
+
     for claim in item['claims']:
         count = 0
         label = pid_label(claim)
@@ -62,23 +77,26 @@ def item_detail_parse(qid):
             if count > 0:
                 count_dict[claim] = count
     output_dict['claims'] = OrderedDict(sorted(output_dict['claims'].items()))
-    output_dict['claims'] = OrderedDict(sorted(output_dict['claims'].items(), key=dict_sorting_by_length))
-    output_dict['categories'] = sorted(sorted(output_dict['categories']), key=list_sorting_by_length)
+    output_dict['claims'] = OrderedDict(sorted(output_dict['claims'].items(),
+                                               key=dict_sorting_by_length))
+    output_dict['categories'] = sorted(sorted(output_dict['categories']),
+                                       key=list_sorting_by_length)
     prop_list = LIST.properties()
     for prop in prop_list:
         instance = [prop[0], pid_label(prop[0]), 0, prop[1]]
         try:
             instance[2] = count_dict[prop[0]]
-        except:
-            pass
-        output_dict['properties'].append(instance) 
+        except Exception as _e:
+            logging.exception("Exception updating instance property.")
+        output_dict['properties'].append(instance)
     save_caches()
     output_dict['prop-counts'] = count_dict
     # print ( '\n NOW', output_dict, '\n NEXT', count_dict)
     return output_dict
 
 def parse_claims(claim, label, json_details, count, output_dict):
-    """Uses the json_details dictionary of a single claim and outputs the parsed data into the output_dict"""
+    """Uses the json_details dictionary of a single claim and outputs the parsed
+    data into the output_dict"""
     #Parsing references
     # print (claim, '\n', label,'\n', json_details, '\n', count, '\n', output_dict)
     try:
@@ -90,7 +108,8 @@ def parse_claims(claim, label, json_details, count, output_dict):
             ref_list = json_details['references'][0]
             for snak in ref_list['snaks-order']:
                 pid = ref_list['snaks'][snak][0]['property']
-                reference.append((pid, pid_label(pid), parse_by_datatype(ref_list['snaks'][snak][0]['datavalue']['value'])))
+                datatype = ref_list['snaks'][snak][0]['datavalue']['value']
+                reference.append(pid, pid_label(pid), parse_by_datatype(datatype))
                 ref_num += 1
         val = ["error at the "]
         size = 1
@@ -102,12 +121,13 @@ def parse_claims(claim, label, json_details, count, output_dict):
         try:
             data_type = json_details['mainsnak']['datatype']
             if data_type == 'external-id':
-                output_dict['ex-ids'][(claim, label, val, url_formatter(claim, val))].append(val) 
+                output_dict['ex-ids'][(claim, label, val, url_formatter(claim, val))].append(val)
             else:
                 output_dict['claims'][(claim, label, size)].append(val)
             if ref_num > 0:
                 output_dict['refs'][(claim, val[0])] = reference
-        except:
+        except Exception as _e:
+            logging.exception("Exception handling item datatype.")
             if data_type == 'external-id':
                 # print (json_details)
                 output_dict['ex-ids'][(claim, label, val, url_formatter(claim, val))] = [val]
@@ -124,12 +144,13 @@ def parse_claims(claim, label, json_details, count, output_dict):
             output_dict["claims"][(claim, label, size)].append(image_url(original))
             output_dict["claims"][(claim, label, size)].remove(original)
         count += 1
-    except Exception as e:
-        print (e)
+    except Exception as _e:
+        logging.exception("Exception when parsing claims.")
     return count
 
 def parse_by_datatype(data):
-    """Checks the datatype of the current data value to determine how to return as a string or ID-label tuple"""
+    """Checks the datatype of the current data value to determine how to
+    return as a string or ID-label tuple"""
     data_type = type(data)
     if data_type is list:
         pass
@@ -186,7 +207,7 @@ def id_to_label_list(id):
     """Takes in an id (P## or Q##) and returns a list of that entity's label and id"""
     if id[0].lower() == 'p':
         return [id, pid_label(id)]
-    else: return [id, qid_label(id)]
+    return [id, qid_label(id)]
 
 def qid_label(qid):
     """Converts item identifier (Q###) to a label and updates the cache"""
@@ -234,7 +255,7 @@ def pid_label(pid):
 
 def time_formatter(time):
     """Converts wikidata's time json to a human readable string"""
-    try: 
+    try:
         return datetime.datetime.strptime(time, '+%Y-%m-%dT%H:%M:%SZ').strftime("%A, %B %-d, %Y")
     except:
         return time
@@ -295,7 +316,7 @@ def caching_label(label_id, label, file_name):
 def qid_to_basic_details(qid):
     """Input item qid and returns a tuple: (qid, label, description) using WikiDataIntegrator"""
     opt = wdi_core.WDItemEngine(wd_item_id=qid)
-    return {"id": opt.wd_item_id, "label": opt.get_label().replace("'", "&#39;"), "description": opt.get_description().replace("'","&#39;"),  "aliases": opt.get_aliases()} 
+    return {"id": opt.wd_item_id, "label": opt.get_label().replace("'", "&#39;"), "description": opt.get_description().replace("'","&#39;"),  "aliases": opt.get_aliases()}
 
 load_caches()
 
