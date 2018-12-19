@@ -16,7 +16,7 @@ Quick Start
 -----------
 The portal is a Flask web application written in Python. It's currently easy to install as long as you have a Python 3 environment. Be aware that this is currently a local development installation, it's not ready for deployment as a reliable application to a server. We're working on that. That said there's a few stages to getting going:
 1. Getting the code.
-2. Setting up a Python 3 virtualenv (optional but reccommended).
+2. Setting up a Python 3 virtualenv (optional but recommended).
 3. Installing the portal prototype and its dependencies.
 4. Running the portal.
 
